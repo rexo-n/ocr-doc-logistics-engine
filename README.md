@@ -1,4 +1,4 @@
-# OCR Document Logistics Engine (CROM)
+# OCR Document Logistics Engine (OCR-ENGINE.py)
 
 A high-throughput, multi-threaded document recognition pipeline. This engine monitors a directory for incoming logistics PDFs (like invoices and delivery challans), uses computer vision to extract and identify the documents, and automatically routes and renames them based on strict regex heuristics.
 
@@ -30,7 +30,7 @@ An event-driven, multi-threaded computer vision pipeline and Terminal User Inter
 
 ### ⚠️ IMPORTANT: ARCHITECTURAL NOTICE
 > **This engine is NOT a generic plug-and-play script.**  
-> `crom.py` is an industrial-grade automation framework built around specific layout heuristics, QR formats, and document noise profiles. **It cannot be run out of the box on arbitrary PDFs without custom tailoring.** You must calibrate the configuration dictionary, regex rules, keyword weights, and false-positive boundaries to match your organization's exact document schemas.
+> `ocr-engine.py` is an industrial-grade automation framework built around specific layout heuristics, QR formats, and document noise profiles. **It cannot be run out of the box on arbitrary PDFs without custom tailoring.** You must calibrate the configuration dictionary, regex rules, keyword weights, and false-positive boundaries to match your organization's exact document schemas.
 
 ---
 
