@@ -1,0 +1,5 @@
+pymupdf>=1.23.0
+pillow>=10.0.0
+pytesseract>=0.3.10
+pyzbar>=0.1.9
+rich>=13.0.0
