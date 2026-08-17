@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.tmp
+_stitch_tmp_*
+crom_audit.log
+.DS_Store
+Thumbs.db
