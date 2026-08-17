@@ -72,10 +72,6 @@ flowchart TD
 Tesseract OCR must be installed on your operating system:
 
 * **Windows:** Install via the UB-Mannheim installer to `C:\Program Files\Tesseract-OCR\tesseract.exe`.
-* **Linux (Debian/Ubuntu):**
-  ```bash
-  sudo apt update && sudo apt install -y tesseract-ocr libzbar0
-  ```
 
 ### 2. Python Dependencies
 Install all required libraries via `pip`:
