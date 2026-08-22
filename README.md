@@ -1,108 +1,260 @@
-# OCR Document Logistics Engine (OCR-ENGINE.py)
+# OCR Document Logistics Engine
 
-A high-throughput, multi-threaded document recognition pipeline. This engine monitors a directory for incoming logistics PDFs (like invoices and delivery challans), uses computer vision to extract and identify the documents, and automatically routes and renames them based on strict regex heuristics.
+> **I got tired of watching documents get processed manually, so I built a system to do it for me.**
 
-### ⚙️ Core Architecture
-* **Live Directory Watcher:** Real-time polling with queue management to handle bulk document dumps.
-* **Multi-Threaded Workers:** Concurrent processing pool to handle heavy OCR rendering without UI blocking.
-* **Hybrid Vision System:** 
-  * Fast-path barcode/QR decoding (`pyzbar`) with JWT payload parsing.
-  * Fallback OCR slow-path (`Tesseract`) with image preprocessing (sharpening, contrast, noise reduction via `Pillow`).
-  * `PyMuPDF` (fitz) for PDF layout analysis and text layer extraction.
-* **Rich TUI (Terminal UI):** Live telemetry dashboard built with `Rich`, tracking worker states, queue depth, win-rates, and recent history.
+A multi-threaded document recognition and routing engine built around a real logistics workflow.
 
-### The "Brain" (Heuristics Engine)
-The engine doesn't just blindly read text; it scores it. It uses weighted regex patterns with negative lookbehinds to prevent false positives (e.g., rejecting 6-digit postal codes that look like tracking numbers).
+The engine watches for incoming PDFs, identifies what they contain using QR/barcode detection, PDF text extraction, and OCR, then determines the most likely document type and routes the file accordingly.
 
-*This repository contains the core engine logic. Proprietary vendor schemas and client routing rules have been sanitized for public portfolio display.*
-
-
-# 📦 OCR Document Logistics Engine (CROM v10.3)
-
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![OCR: Tesseract](https://img.shields.io/badge/OCR-Tesseract-green.svg)](https://github.com/tesseract-ocr/tesseract)
-[![UI: Rich](https://img.shields.io/badge/TUI-Rich-magenta.svg)](https://github.com/Textualize/rich)
-
-An event-driven, multi-threaded computer vision pipeline and Terminal User Interface (TUI) designed to ingest, classify, extract, and rename high-volume logistics PDFs in real time.
+This started as a practical problem, not a portfolio project. The code grew as the problems did.
 
 ---
 
-### ⚠️ IMPORTANT: ARCHITECTURAL NOTICE
-> **This engine is NOT a generic plug-and-play script.**  
-> `ocr-engine.py` is an industrial-grade automation framework built around specific layout heuristics, QR formats, and document noise profiles. **It cannot be run out of the box on arbitrary PDFs without custom tailoring.** You must calibrate the configuration dictionary, regex rules, keyword weights, and false-positive boundaries to match your organization's exact document schemas.
+## What It Does
 
----
+At its core, the system takes this:
 
-## ⚡ Core Architecture
-
-```mermaid
-flowchart TD
-    A[Ingest Directory] -->|DirectoryWatcher| B[Thread-Safe Task Queue]
-    B --> C[Worker Threads Pool]
-    C --> D{Dual-Track Vision}
-    D -->|Fast Path| E[pyzbar QR/Barcode & JWT Payload]
-    D -->|Slow Path| F[PyMuPDF Render + Dual-Pass Tesseract OCR]
-    E --> G[Heuristic Brain Scoring Engine]
-    F --> G
-    G --> H[Atomic Rename & Audit Log]
+```text
+Messy pile of incoming PDFs
 ```
 
-**Execution Flow:**  
-`[ Ingest Directory ]` ➔ `[ DirectoryWatcher ]` ➔ `[ Task Queue ]` ➔ `[ Worker Pool ]` ➔ `[ Fast QR / Fallback OCR ]` ➔ `[ Brain Heuristics ]` ➔ `[ Atomic Rename ]`
+and tries to turn it into this:
+
+```text
+            Incoming PDFs
+                  |
+                  v
+          Directory Watcher
+                  |
+                  v
+            Task Queue
+                  |
+          +-------+-------+
+          |               |
+          v               v
+     QR / Barcode       OCR Pipeline
+      Fast Path          Slow Path
+          |               |
+          +-------+-------+
+                  |
+                  v
+        Document Classification
+                  |
+                  v
+         Heuristic Scoring
+                  |
+                  v
+      Validate / Reject / Route
+                  |
+                  v
+          Rename + Audit Log
+```
+
+The goal isn't just to **read text**.
+
+The goal is to make a decision about **what the document actually is**, while avoiding the hundreds of ways a messy logistics document can produce the wrong answer.
 
 ---
 
-## ✨ Key Capabilities
+## Why I Built It
 
-* **Dual-Track Vision Pipeline:** Evaluates high-speed QR/barcodes first via `pyzbar`. If unreadable or missing, gracefully falls back to multi-pass `Tesseract OCR` with contrast, sharpening, and median-filter preprocessing.
-* **Non-Blocking Rich TUI:** Real-time terminal dashboard showing live thread activity, processing velocity, queue depth, historical win-rates, and system events.
-* **Plausible Deniability & False-Positive Rejection:** Employs regex boundaries with negative lookbehinds and numeric blocklists to prevent postal codes, GSTINs, or telephone numbers from being misidentified as document IDs.
-* **Atomic Filesystem Operations:** Relies on OS-level `os.replace` temp-file swapping to eliminate corruption risks during network drops, file-locking contention, or system interruptions.
-* **Operational Runtime Modes:**
-  * **Stitch Mode (`S`):** Merges sequential multi-page scan drops into a master PDF prior to parsing.
-  * **Failsafe Mode (`F`):** Automatically appends unclassified pages to the previously verified document.
-  * **Panic Stop (`I`):** Cancels in-flight worker threads immediately and safely pauses the queue.
+I had practical exposure to logistics workflows where documents were constantly being scanned, moved around, identified, and processed.
+
+A lot of that work was repetitive.
+
+So naturally, my first thought was basically:
+
+> *"Why are we doing this manually?"*
+
+That became the reason for this project.
+
+What started as document recognition gradually turned into a larger system involving concurrency, OCR, barcode processing, filesystem safety, heuristics, queue management, and runtime monitoring.
+
+It is still very much a project built by someone who likes finding problems and then going way too far trying to solve them.
 
 ---
 
-## 📋 Prerequisites
+## Architecture
 
-### 1. External System Binaries
-Tesseract OCR must be installed on your operating system:
+### 1. Ingestion
 
-* **Windows:** Install via the UB-Mannheim installer to `C:\Program Files\Tesseract-OCR\tesseract.exe`.
-* **Linux (Debian/Ubuntu):**
-  ```bash
-  sudo apt update && sudo apt install -y tesseract-ocr libzbar0
-  ```
-  
-### 2. Python Dependencies
-Install all required libraries via `pip`:
-```bash
-pip install pymupdf pillow pytesseract pyzbar rich
+A live directory watcher monitors incoming files and places new work into a thread-safe queue.
+
+This allows the system to handle continuous document drops instead of relying on a single batch-processing run.
+
+### 2. Parallel Processing
+
+Worker threads consume queued documents concurrently.
+
+OCR is expensive, so keeping processing separate from the interface allows the terminal UI to remain responsive while documents are being processed.
+
+### 3. Dual-Path Recognition
+
+The engine uses two primary recognition paths.
+
+**Fast path**
+
+* QR / barcode detection using `pyzbar`
+* Payload extraction
+* Structured identifier detection
+
+**Fallback path**
+
+* PDF rendering with `PyMuPDF`
+* Image preprocessing with `Pillow`
+* Tesseract OCR
+* Text extraction and heuristic analysis
+
+The idea is simple:
+
+> **Use the cheap, reliable signal first. Use OCR when you actually need it.**
+
+---
+
+## The Classification Engine
+
+This is where the project gets a little more interesting.
+
+The engine doesn't blindly search for a number and assume it must be a document ID.
+
+Instead, it evaluates multiple signals and assigns weighted scores to possible matches.
+
+For example:
+
+```text
+Potential identifier
+        |
+        +--> Regex match
+        |
+        +--> Keyword context
+        |
+        +--> Document type
+        |
+        +--> Numeric validity
+        |
+        +--> Negative patterns
+        |
+        +--> Known noise
+        |
+        v
+     Score
+        |
+        v
+Accept / Reject / Re-evaluate
+```
+
+This matters because logistics documents are full of numbers that **look** useful but aren't.
+
+A six-digit number might be:
+
+* a document ID
+* a postal code
+* a phone number
+* a GST-related value
+* a random reference number
+
+The engine therefore uses weighted patterns, negative lookbehinds, keyword context, and numeric filtering to reduce false positives.
+
+---
+
+## False-Positive Filtering
+
+One of the recurring problems during development was:
+
+> **OCR successfully reading the wrong thing.**
+
+Perfect OCR isn't enough.
+
+A recognizer can correctly read text and still make the wrong classification.
+
+So the engine deliberately rejects known noise patterns and uses surrounding context to determine whether a candidate identifier is actually plausible.
+
+This is one of the main reasons the project evolved beyond a simple:
+
+```python
+text = ocr(pdf)
+regex.search(text)
+```
+
+script.
+
+---
+
+## Runtime Interface
+
+The engine includes a live `Rich` terminal interface for monitoring processing in real time.
+
+It tracks things such as:
+
+* active workers
+* queue depth
+* processing state
+* recent results
+* processing history
+* success / rejection information
+* runtime events
+
+The interface exists for a practical reason:
+
+**when something goes wrong, I want to know what the system is doing without opening another terminal and guessing.**
+
+---
+
+## Operational Modes
+
+The engine includes several modes designed around real document-handling problems.
+
+|      Key      | Mode           | Purpose                                              |
+| :-----------: | -------------- | ---------------------------------------------------- |
+| `P` / `Space` | Pause / Resume | Pause directory polling and task assignment          |
+|      `S`      | Stitch         | Merge sequential multi-page scan drops               |
+|      `F`      | Failsafe       | Append uncertain pages to the last verified document |
+|      `I`      | Panic Stop     | Abort active processing and pause the queue          |
+|      `Q`      | Quit           | Shut down workers cleanly                            |
+
+These aren't just UI features. They exist because real input isn't always neat.
+
+---
+
+## Filesystem Safety
+
+Document processing can become messy when files are being moved while another process is still touching them.
+
+The engine therefore uses atomic filesystem operations where appropriate to reduce the chance of partially processed or corrupted output.
+
+Operations are also recorded in an audit log.
+
+Example:
+
+```text
+[2026-08-18 00:15:30] ID:INV-849201 TYPE:INVOICE SIZE:420.5KB METHOD:AUTO
+[2026-08-18 00:16:02] ID:LR-102938  TYPE:LR      SIZE:1.1MB   METHOD:AUTO
 ```
 
 ---
 
-## 🛠️ Customization & Setup Guide
+## A Note About the Configuration
 
-To adapt `crom.py` to your target workflow, adjust these three code blocks:
+This isn't a universal OCR package.
 
-### 1. Global Parameters (`CONFIG`)
-Modify global constants inside the `CONFIG` dictionary:
+The classification logic is intentionally designed around **known document schemas, identifier formats, keywords, and noise patterns**.
+
+To adapt it to another workflow, the rules and configuration need to be calibrated for that environment.
+
+For example:
+
 ```python
 CONFIG: AppConfig = {
-    "WORKER_THREADS":       2,            # Number of parallel OCR threads
-    "PREFERRED_PREFIX":     "img_",       # Only ingest files containing this prefix
-    "WATCH_EXTENSIONS":     (".pdf",),    # Target extensions to monitor
-    "INVOICE_PREFIX":       "INV-",       # Expected document identifier prefix
-    "MIN_OCR_CONFIDENCE":   25.0,         # Minimum score required for auto-rename
+    "WORKER_THREADS": 2,
+    "PREFERRED_PREFIX": "img_",
+    "WATCH_EXTENSIONS": (".pdf",),
+    "INVOICE_PREFIX": "INV-",
+    "MIN_OCR_CONFIDENCE": 25.0,
 }
 ```
 
-### 2. Pattern Matching Rules (`_RAW_RULES`)
-Define the document categories, priority ranks, and regex patterns to match:
+Pattern rules can then be defined for specific document types:
+
 ```python
 PatternRule(
     name="INVOICE",
@@ -113,56 +265,129 @@ PatternRule(
         r"(?<!\d)(INV-\d{5,6})(?!\d)",
     ),
     keywords=(
-        "TAX INVOICE", "BILL TO", "ORIGINAL FOR RECIPIENT", "GSTIN",
+        "TAX INVOICE",
+        "BILL TO",
+        "ORIGINAL FOR RECIPIENT",
+        "GSTIN",
     ),
 )
 ```
 
-### 3. Noise & Pincode Filter (`BrainSystem`)
-Configure numeric ranges in `_PINCODE_RANGES` to ensure 6-digit postal codes or area codes are dropped rather than tagged as tracking numbers:
-```python
-_PINCODE_RANGES: Tuple[Tuple[int, int], ...] = (
-    (100000, 100150),  # Region A
-    (200000, 200500),  # Region B
-)
+This makes the engine a **framework for a workflow**, rather than a one-size-fits-all OCR script.
+
+---
+
+## Prerequisites
+
+### Tesseract
+
+Tesseract OCR must be installed separately.
+
+**Debian / Ubuntu:**
+
+```bash
+sudo apt update
+sudo apt install -y tesseract-ocr libzbar0
+```
+
+**Windows:**
+
+Install Tesseract OCR and configure the executable path if required.
+
+### Python
+
+Python 3.10+ is recommended.
+
+Install dependencies:
+
+```bash
+pip install pymupdf pillow pytesseract pyzbar rich
 ```
 
 ---
 
-## 🚀 Execution
+## Running It
 
-Run the script from your terminal:
+Launch the engine:
+
 ```bash
 python crom.py
 ```
 
-1. Select `[1] Watch mode`.
-2. Select your target directory using the OS file dialog.
-3. Drop PDF scans matching your `PREFERRED_PREFIX` into the folder and monitor extraction from the live dashboard.
+Start watch mode, select the working directory, and begin feeding documents into the monitored folder.
 
----
+The system handles the rest:
 
-## 🎮 Dashboard Controls
-
-| Hotkey | Action | Function |
-|:---:|---|---|
-| **`P` / `Space`** | **Pause / Resume** | Halts directory polling and task assignment. |
-| **`S`** | **Stitch Toggle** | Ingests multi-part pages and merges them into `Master.pdf`. |
-| **`F`** | **Failsafe Toggle** | Blind-appends succeeding scans to the last processed document. |
-| **`I`** | **Panic Stop** | Sets queue state to Paused and broadcasts an abort signal to workers. |
-| **`Q`** | **Quit** | Shuts down worker threads cleanly and closes the application. |
-
----
-
-## 📄 Audit Logging
-
-All operations write persistent audit entries to `crom_audit.log` inside the monitored working directory:
 ```text
-[2026-08-18 00:15:30] ID:INV-849201      TYPE:INVOICE      SIZE:420.5KB   METHOD:AUTO
-[2026-08-18 00:16:02] ID:LR-102938       TYPE:LR           SIZE:1.1MB     METHOD:AUTO
+Detect
+  ↓
+Queue
+  ↓
+Process
+  ↓
+Classify
+  ↓
+Validate
+  ↓
+Route
+  ↓
+Log
 ```
 
 ---
 
-## ⚖️ License
-Distributed under the MIT License. See `LICENSE` for more information.
+## Project Structure
+
+The public repository contains the core processing engine and supporting logic.
+
+Proprietary vendor schemas, client-specific routing rules, and sensitive document information have been removed or generalized for public release.
+
+The goal is to demonstrate the engineering behind the system without exposing private operational data.
+
+---
+
+## What I Learned Building This
+
+This project ended up teaching me much more than OCR.
+
+I got to work through problems involving:
+
+* concurrency
+* queues and worker coordination
+* OCR reliability
+* document classification
+* regex design
+* false-positive handling
+* filesystem race conditions
+* process monitoring
+* terminal UI design
+* error handling
+* designing around imperfect real-world input
+
+Most importantly, it taught me that **getting the computer to read something is only half the problem.**
+
+The harder part is getting it to make the *right decision*.
+
+---
+
+## Status
+
+This is an evolving project.
+
+The architecture and core engine are usable, but document-specific rules and heuristics are inherently tied to the workflow they were designed for.
+
+That is part of the project.
+
+It was never meant to be perfect.
+
+It was meant to solve a real problem, survive messy input, and keep getting better.
+
+---
+
+## License
+
+Distributed under the MIT License.
+
+---
+
+### `REXON // build it, break it, understand it.`
