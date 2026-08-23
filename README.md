@@ -336,6 +336,14 @@ Log
 
 ---
 
+## The Impact
+* **Massive Throughput Increase:** Scaled daily processing volume from the manual limit of ~500 PDFs/day to smoothly handling **1,000+ PDFs/day**. The only real bottlenecks left are physical: scanner feed rates, QR clarity, and how fast the host machine can crunch the PDFs.
+* **70% Time Reduction:** I was able to eliminate the majority of manual data entry, reducing human processing time by 70% while maintaining high accuracy.
+* **Smart Filtering:** I manually tuned custom heuristics that don't just "read text," but actively filter out OCR false-positives and known noise to ensure the engine makes the right routing decisions.
+
+
+---
+
 ## Project Structure
 
 The public repository contains the core processing engine and supporting logic.
